@@ -3,72 +3,73 @@ from pathlib import Path
 from launch import git, run
 import launch
 import sys
+import logging
+from packaging import version as pv
+import importlib.metadata as metadata
 
-# launch.run(f'git pull', f"updating auto-photoshop plugin",
-#         f"Couldn't update auto-photoshop plugin")
-
+# Setup logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 REPO_LOCATION = Path(__file__).parent
-# auto_update = os.environ.get("AUTO_UPDATE", "True").lower() in {"true", "yes"}
 auto_update = True
 extension_branch = "master"
-# extension_branch = "horde_native"
-# extension_branch = "auto_extension_ccx_1_1_7"
 
 if auto_update:
-    print("[Auto-Photoshop-SD] Attempting auto-update...")
+    logging.info("[Auto-Photoshop-SD] Attempting auto-update...")
 
     try:
         checkout_result = run(
             f'"{git}" -C "{REPO_LOCATION}" checkout {extension_branch}',
             "[Auto-Photoshop-SD] switch branch to extension branch.",
         )
-        print("checkout_result:", checkout_result)
+        logging.info(f"checkout_result: {checkout_result}")
 
         branch_result = run(
             f'"{git}" -C "{REPO_LOCATION}" branch',
             "[Auto-Photoshop-SD] Current Branch.",
         )
-        print("branch_result:", branch_result)
+        logging.info(f"branch_result: {branch_result}")
 
         fetch_result = run(
             f'"{git}" -C "{REPO_LOCATION}" fetch', "[Auto-Photoshop-SD] Fetch upstream."
         )
-        print("fetch_result:", fetch_result)
+        logging.info(f"fetch_result: {fetch_result}")
 
         pull_result = run(
             f'"{git}" -C "{REPO_LOCATION}" pull', "[Auto-Photoshop-SD] Pull upstream."
         )
-        print("pull_result:", pull_result)
+        logging.info(f"pull_result: {pull_result}")
 
     except Exception as e:
-        print("[Auto-Photoshop-SD] Auto-update failed:")
-        print(e)
-        print("[Auto-Photoshop-SD] Ensure git was used to install extension.")
-
-
-# print("Auto-Photoshop-SD plugin is installing")
-import pkg_resources
-
+        logging.error("[Auto-Photoshop-SD] Auto-update failed:")
+        logging.error(e)
+        logging.error("[Auto-Photoshop-SD] Ensure git was used to install extension.")
 
 def install_or_update_package(package_name, package_version):
-    if not launch.is_installed(package_name):
+    try:
+        installed_version = metadata.version(package_name)
+        if installed_version:
+            installed_version = pv.parse(installed_version)
+            if installed_version != pv.parse(package_version):
+                logging.info(
+                    f"{package_name} version: {installed_version} will update to version: {package_version}"
+                )
+                launch.run_pip(
+                    f"install {package_name}=={package_version}",
+                    "update requirements for Auto-Photoshop Image Search",
+                )
+        else:
+            logging.info(f"Unable to determine installed version of {package_name}.")
+    except metadata.PackageNotFoundError:
+        logging.error(f"Error: {package_name} is not installed.")
         launch.run_pip(
             f"install {package_name}=={package_version}",
-            "requirements for Auto-Photoshop Image Search",
+            "install requirements for Auto-Photoshop Image Search",
         )
-    else:  # it's installed but we need to check for update
-        version = pkg_resources.get_distribution(package_name).version
-        if version != package_version:
-            print(
-                f"{package_name} version: {version} will update to version: {package_version}"
-            )
-            launch.run_pip(
-                f"install {package_name}=={package_version}",
-                "update requirements for Auto-Photoshop Image Search",
-            )
+    except Exception as e:
+        logging.error(f"An unexpected error occurred while checking {package_name}: {e}")
 
-
-# Now we can use this function to install or update the packages
+# Example usage:
 install_or_update_package("duckduckgo_search", "3.9.9")
 install_or_update_package("httpx", "0.24.1")
+
